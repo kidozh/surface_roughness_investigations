@@ -5,11 +5,11 @@ import matplotlib.pyplot as plt
 import matplotlib
 import numpy as np
 
-plt.rcParams['font.sans-serif'] = ['Hiragino Sans GB']  # 用来正常显示中文标签
-# plt.rcParams['font.sans-serif'] = ['YaHei Consolas Hybrid']  # 用来正常显示中文标签
-plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
-matplotlib.rcParams['pdf.fonttype'] = 42
-matplotlib.rcParams['ps.fonttype'] = 42
+# plt.rcParams['font.sans-serif'] = ['Hiragino Sans GB']  # 用来正常显示中文标签
+# # plt.rcParams['font.sans-serif'] = ['YaHei Consolas Hybrid']  # 用来正常显示中文标签
+# plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
+# matplotlib.rcParams['pdf.fonttype'] = 42
+# matplotlib.rcParams['ps.fonttype'] = 42
 
 from data import dataSet
 
