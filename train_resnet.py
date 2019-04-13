@@ -45,7 +45,7 @@ for i in [20, 15, 10, 5, 35]:
     model_name = '%s.kerasmodel' % (train_name)
 
     predict = True
-    model = build_multi_input_main_residual_network(32, 500, 9, 1, loop_depth=DEPTH)
+    model = build_multi_input_main_residual_network(32, 500, 8, 1, loop_depth=DEPTH)
     if not predict:
         tb_cb = TensorBoard(log_dir=log_dir + train_name)
         ckp_cb = ModelCheckpoint(MODEL_CHECK_PT, monitor='val_loss', save_weights_only=True, verbose=1,
