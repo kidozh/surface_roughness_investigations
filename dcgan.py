@@ -32,9 +32,12 @@ def normalize_signal_between(signal, a:float, b:float, min:float, max:float):
     return a + (b - a) / (max - min) * (signal - min)
 
 
-CHANNEL_MAX = np.array([1.63892655e+03, 9.09336215e+05, 1.38203458e+03, 8.52178642e+02,2.78128743e+02, 8.24441910e+01, 5.72762966e+03, 5.02997816e+04,6.68741345e+04])
-CHANNEL_MIN = np.array([0.,-1262.48491573, -1321.30642639,  -845.40312624,-264.68062401,  -118.98458004, -4669.41475868, -596.80461884,-97.03230858])
+# CHANNEL_MAX = np.array([5.72762966e+03, 1.38203458e+03, 8.52178642e+02, 2.64174005e+01, 1.67942482e+01, 3.29169921e+01, 9.09336215e+05, 6.68741345e+04])
+# CHANNEL_MIN = np.array([-4.66941476e+03, -1.32130643e+03, -8.45403126e+02, -2.43587727e+01,-1.99686560e+01, -3.26520661e+01, -8.24684706e-02, -4.16741371e-01])
 
+
+CHANNEL_MAX = np.array([10000,10000,1000,100,100,100,1e6,1e5])
+CHANNEL_MIN = np.array([-1e4,-1e4,-1e3,-100,-100,-100,-1e3,-1e2])
 
 def normalize_signal_to_sample(signal:np.ndarray):
     normalized_signal = np.zeros(signal.shape)
@@ -60,13 +63,13 @@ class DCGAN():
     def __init__(self):
         # Input shape
         self.time_length = 500
-        self.channels = 9
+        self.channels = 8
         self.signal_shape = (self.time_length, self.channels)
         # self.img_rows = 28
         # self.img_cols = 28
         # self.channels = 1
         # self.img_shape = (self.img_rows, self.img_cols, self.channels)
-        self.latent_dim = 4500 - 4
+        self.latent_dim = 4000 - 4
         self.num_classes = 50
 
         optimizer = Adam(0.0001, 0.5)
@@ -297,7 +300,7 @@ class DCGAN():
         # x, y = tool_wear_dataset.get_recoginition_data_in_class_num(class_num=50)
         data = dataSet()
         x, y = data.get_reinforced_data()
-        y = data.get_reinforced_condition_data()
+        y = data.get_condition_number_data()
         # x = x[:, ::10, :]
         (X_train, y_train) = x, y
 
@@ -305,10 +308,11 @@ class DCGAN():
 
         noise = np.random.normal(0, 1, (r * c, self.latent_dim))
         sampled_labels = y[0:10]
+        print(sampled_labels.shape,sampled_labels)
         gen_imgs = self.generator.predict([noise, sampled_labels])
         gen_imgs = normalize_sample_to_signal(gen_imgs)
 
-        for channel in range(9):
+        for channel in range(8):
             fig, axs = plt.subplots(r, c)
             import os
             directory_path = os.path.join("images", "%s" % (channel + 1))
@@ -319,12 +323,13 @@ class DCGAN():
                 for j in range(c):
                     # Force in Y
                     axs[i, j].plot(gen_imgs[cnt, :, channel], label="%d" % (cnt))
-                    axs[i, j].set_title("%s " % (sampled_labels[cnt][0]))
+                    axs[i, j].set_title("%d "%(sampled_labels[cnt,0]))
+                    # axs[i, j].set_title("%d " % (sampled_labels[cnt][0]))
                     # axs[i, j].legend()
                     # axs[i, j].axis('off')
 
                     cnt += 1
-            fig.savefig("images/%s/channel_%s_epoch_%d.png" % (channel + 1, channel + 1, epoch))
+            fig.savefig("images/%d/channel_%d_epoch_%d.png" % (channel + 1, channel + 1, epoch))
             plt.close("all")
 
     def save_model(self,epoch=None):
@@ -338,8 +343,8 @@ class DCGAN():
             open(options['file_arch'], 'w').write(json_string)
             model.save_weights(options['file_weight'])
 
-        save(self.generator, "dcgan_generator_REIN_SCALE_01")
-        save(self.discriminator, "dcgan_discriminator_REIN_SCALE_01")
+        save(self.generator, "dcgan_generator")
+        save(self.discriminator, "dcgan_discriminator")
         if epoch != None:
             save(self.generator, "dcgan_generator_REIN_SCALE@%s"%(epoch))
             save(self.discriminator, "dcgan_discriminator_REIN_SCALE@%s"%(epoch))
@@ -350,11 +355,11 @@ class DCGAN():
             weights_path = "saved_model/%s_weights.hdf5" % model_name
             model.load_weights(weights_path)
 
-        load(self.generator, "soft_dcgan_generator_REIN")
-        load(self.discriminator, "soft_dcgan_discriminator_REIN")
+        load(self.generator, "dcgan_generator")
+        load(self.discriminator, "dcgan_discriminator")
         if epoch:
-            load(self.generator, "dcgan_generator_REIN_SCALE_01@%s"%(epoch))
-            load(self.discriminator, "dcgan_discriminator_REIN_SCALE_01@%s"%(epoch))
+            load(self.generator, "dcgan_generator_REIN_SCALE@%s"%(epoch))
+            load(self.discriminator, "dcgan_discriminator_REIN_SCALE@%s"%(epoch))
 
     def generate_and_test_signal(self, filename=None):
         batch_number = 180
@@ -392,10 +397,10 @@ class DCGAN():
 
 if __name__ == '__main__':
     dcgan = DCGAN()
-    PREDICT = True
+    PREDICT = False
 
     if PREDICT:
-        EPOCH = None
+        EPOCH = 4000
         dcgan.load_model(epoch=EPOCH)
 
         dcgan.save_imgs(1)

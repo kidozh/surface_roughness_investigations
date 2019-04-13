@@ -4,7 +4,9 @@ This is a projects which aims to monitor surface roughness of workpiece by machi
 
 ## Current step
 
-+ build a high-accurate monitoring model ![Comparison between real and predicted value](./RESULT.svg)
++ build a high-accurate monitoring model 
+![Loss curve in training](./loss_curve.jpg)
+![Comparison between real and predicted value](./RESULT.svg)
 
 ## What we will do in the future
 
