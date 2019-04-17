@@ -15,7 +15,7 @@ from data import dataSet
 
 data = dataSet()
 signal, sf_roughness = data.get_reinforced_data()
-
+signal = signal[:,:,0:6]
 print(signal.shape, sf_roughness.shape)
 
 # y = data.gen_y_dat()
@@ -39,13 +39,13 @@ for i in [20, 15, 10, 5, 35]:
 
     log_dir = 'Resnet_down_sample_logs/'
 
-    train_name = 'Resnet_block_%s' % (DEPTH)
+    train_name = 'Resnet_block_REDUCE_AE_%s' % (DEPTH)
     MODEL_CHECK_PT = "%s.kerascheckpts" % (train_name)
 
     model_name = '%s.kerasmodel' % (train_name)
 
     predict = True
-    model = build_multi_input_main_residual_network(32, 500, 8, 1, loop_depth=DEPTH)
+    model = build_multi_input_main_residual_network(32, 500, 6, 1, loop_depth=DEPTH)
     if not predict:
         tb_cb = TensorBoard(log_dir=log_dir + train_name)
         ckp_cb = ModelCheckpoint(MODEL_CHECK_PT, monitor='val_loss', save_weights_only=True, verbose=1,
@@ -71,6 +71,8 @@ for i in [20, 15, 10, 5, 35]:
 
         # print(model.evaluate(x, y))
         signal, srf = data.get_test_show_data()
+
+        signal = signal[:, :, 0:6]
         srf_pred = model.predict(signal)
         print(model.metrics_names,model.evaluate(signal,srf))
 

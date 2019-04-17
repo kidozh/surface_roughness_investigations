@@ -173,7 +173,7 @@ class dataSet(object):
         reinforced_label = []
         for sample_idx in range(signal.shape[0]):
             for i in range(0,20):
-                print(signal[sample_idx].shape)
+                # print(signal[sample_idx].shape)
                 cur_signal = signal[sample_idx]
                 reinforced_signal.append(cur_signal[index+i])
                 reinforced_label.append(label[sample_idx])
@@ -211,9 +211,21 @@ if __name__ == "__main__":
     # print(run.shape,spindle.shape,feed.shape,cut.shape)
     signal,label = data.get_reinforced_data()
     # print(data.get_run_number_data().shape)
-    print(signal.max(axis=0).max(axis=0))
-    print(signal.min(axis=0).min(axis=0))
-    print(data.get_condition_number_data().shape)
-    print(data.get_reinforced_condition_data().shape)
+    import matplotlib.pyplot as plt
+
+    max_sig = signal.max(axis=1)
+    min_sig = signal.min(axis=1)
+    for channel in range(8):
+        plt.title("Channel @ %d"%(channel+1))
+        plt.plot(max_sig[:,channel],label="MAX")
+        plt.plot(min_sig[:, channel], label="MIX")
+        plt.legend()
+        plt.show()
+        plt.close()
+    print(signal.max(axis=1).shape)
+    print(signal.min(axis=1).shape)
+
+    # print(data.get_condition_number_data().shape)
+    # print(data.get_reinforced_condition_data().shape)
     # print(data.SPINDLE_SPEED.shape,data.FEED_RATE.shape,data.CUT_DEPTH.shape)
 

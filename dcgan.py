@@ -36,12 +36,12 @@ def normalize_signal_between(signal, a:float, b:float, min:float, max:float):
 # CHANNEL_MIN = np.array([-4.66941476e+03, -1.32130643e+03, -8.45403126e+02, -2.43587727e+01,-1.99686560e+01, -3.26520661e+01, -8.24684706e-02, -4.16741371e-01])
 
 
-CHANNEL_MAX = np.array([10000,10000,1000,100,100,100,1e6,1e5])
-CHANNEL_MIN = np.array([-1e4,-1e4,-1e3,-100,-100,-100,-1e3,-1e2])
+CHANNEL_MAX = np.array([6000,800,300,10,20,30])
+CHANNEL_MIN = np.array([-5000,-800,-150,-10,-20,-30])
 
 def normalize_signal_to_sample(signal:np.ndarray):
     normalized_signal = np.zeros(signal.shape)
-    for channel_idx in range(7):
+    for channel_idx in range(6):
         normalized_signal[:,:,channel_idx] = normalize_signal_between(signal[:,:,channel_idx],-1,1,
                                                                       CHANNEL_MIN[channel_idx],
                                                                       CHANNEL_MAX[channel_idx])
@@ -49,7 +49,7 @@ def normalize_signal_to_sample(signal:np.ndarray):
 
 def normalize_sample_to_signal(signal:np.ndarray):
     sample_signal = np.zeros(signal.shape)
-    for channel_idx in range(7):
+    for channel_idx in range(6):
         sample_signal[:, :, channel_idx] = normalize_signal_between(signal[:, :, channel_idx],
                                                                         CHANNEL_MIN[channel_idx],
                                                                         CHANNEL_MAX[channel_idx],
@@ -63,13 +63,13 @@ class DCGAN():
     def __init__(self):
         # Input shape
         self.time_length = 500
-        self.channels = 8
+        self.channels = 6
         self.signal_shape = (self.time_length, self.channels)
         # self.img_rows = 28
         # self.img_cols = 28
         # self.channels = 1
         # self.img_shape = (self.img_rows, self.img_cols, self.channels)
-        self.latent_dim = 4000 - 4
+        self.latent_dim = self.time_length * self.channels
         self.num_classes = 50
 
         optimizer = Adam(0.0001, 0.5)
@@ -77,9 +77,10 @@ class DCGAN():
 
         # Build and compile the discriminator
         self.discriminator = self.build_discriminator()
-        self.discriminator.compile(loss='binary_crossentropy',
+        self.discriminator.compile(loss=['binary_crossentropy','logcosh'],
                                    optimizer=optimizer,
-                                   metrics=['accuracy'])
+                                   metrics=['accuracy'],
+                                   loss_weights=[1,2])
         self.MAX_TOOL_WEAR = 300
 
         # Build the generator
@@ -94,7 +95,7 @@ class DCGAN():
         self.discriminator.trainable = False
 
         # The discriminator takes generated images as input and determines validity
-        valid = self.discriminator([img, label])
+        valid,sf_roughness = self.discriminator([img, label])
 
         # The combined model  (stacked generator and discriminator)
         # Trains the generator to fool the discriminator
@@ -105,7 +106,7 @@ class DCGAN():
 
         model = Sequential()
 
-        model.add(Dense(128 * 125, input_dim=self.latent_dim+4))
+        model.add(Dense(128 * 125, input_dim=self.latent_dim))
         model.add(Reshape((125, 128)))
         # 5
         model.add(UpSampling1D())
@@ -144,10 +145,12 @@ class DCGAN():
 
         # label_embedding = Flatten()(Embedding(4,np.prod(self.signal_shape)//4,input_length=4)(label))
 
-        # label_embedding = Flatten()(RepeatVector(self.latent_dim)(Dense(1)(label)))
+        # label_embedding = Flatten()(Embedding(4,np.prod(self.signal_shape)//4)(label))
+        label_embedding = Flatten()(RepeatVector(np.prod(self.signal_shape) // 4)(Dense(4)(label)))
+        model_input = multiply([noise,label_embedding])
         # label_embedding = Flatten()(RepeatVector(self.latent_dim)(label))
         # print("@",label.shape,label_embedding.shape,noise.shape)
-        model_input = concatenate([noise, label])
+        # model_input = concatenate([noise, label])
         # model_input = noise
         img = model(model_input)
 
@@ -158,26 +161,26 @@ class DCGAN():
         model = Sequential()
         model.add(Reshape((self.time_length, self.channels)))
 
-        model.add(Conv1D(128, kernel_size=3, strides=2, input_shape=self.signal_shape, padding="same"))
+        model.add(Conv1D(64, kernel_size=3, strides=2, input_shape=self.signal_shape, padding="same"))
         model.add(LeakyReLU(alpha=0.2))
-        model.add(Dropout(0.5))
+        model.add(Dropout(0.8))
         model.add(Conv1D(128, kernel_size=3, strides=2, padding="same"))
         # model.add(ZeroPadding1D(padding=0))
         model.add(BatchNormalization(momentum=0.8))
         model.add(LeakyReLU(alpha=0.2))
-        model.add(Dropout(0.5))
-        model.add(Conv1D(64, kernel_size=3, strides=1, padding="same"))
+        model.add(Dropout(0.8))
+        model.add(Conv1D(256, kernel_size=3, strides=1, padding="same"))
         model.add(BatchNormalization(momentum=0.8))
         model.add(LeakyReLU(alpha=0.2))
-        model.add(Dropout(0.5))
+        model.add(Dropout(0.8))
         # model.add(InstanceNormalization())
         # model.add(BatchNormalization(momentum=0.8))
-        model.add(Conv1D(64, kernel_size=3, strides=1, padding="same"))
+        model.add(Conv1D(256, kernel_size=3, strides=1, padding="same"))
         model.add(BatchNormalization(momentum=0.8))
         model.add(LeakyReLU(alpha=0.2))
-        model.add(Dropout(0.5))
+        model.add(Dropout(0.8))
         model.add(Flatten())
-        model.add(Dense(1, activation='sigmoid'))
+
 
         # model.summary()
 
@@ -196,9 +199,11 @@ class DCGAN():
         # model_input = multiply([flat_img, label_embedding])
         model_input = flat_img
 
-        validity = model(model_input)
+        validity = Dense(1, activation='sigmoid')(model(model_input))
 
-        return Model([img, label], validity)
+        sf_roughness = Dense(1,activation="relu")(model(model_input))
+
+        return Model([img, label], [validity,sf_roughness])
 
     def train(self, epochs, batch_size=128, save_interval=50):
 
@@ -206,8 +211,11 @@ class DCGAN():
         from data import dataSet
         # x, y = tool_wear_dataset.get_recoginition_data_in_class_num(class_num=50)
         data = dataSet()
-        x, y = data.get_reinforced_data()
-        y = data.get_reinforced_condition_data()
+        x, sf_raw_data = data.get_reinforced_data()
+        # Only simulate force
+        x = x[600:,:,0:6]
+        sf_raw_data = sf_raw_data[600:]
+        y = data.get_reinforced_condition_data()[600:,:]
         # x = x[:, ::10, :]
         (X_train, y_train) = x, y
 
@@ -244,6 +252,7 @@ class DCGAN():
             # labels = data.get_reinforced_condition_data()
             another_idx = np.random.randint(0, X_train.shape[0], batch_size)
             fake_labels = y_train[another_idx]
+            sf_labels = sf_raw_data[another_idx]
 
 
             # Sample noise and generate a batch of new images
@@ -256,12 +265,13 @@ class DCGAN():
             # make the labels noisy for the discriminator
             if epoch % 5 == 0 and epoch % 100 != 0:
                 # flip the right to wrong
-                d_loss_real = self.discriminator.train_on_batch([imgs, labels], fake)
-                d_loss_fake = self.discriminator.train_on_batch([gen_imgs, fake_labels], valid)
+                d_loss_real = self.discriminator.train_on_batch([imgs, labels], [fake,sf_labels])
+                d_loss_fake = self.discriminator.train_on_batch([gen_imgs, fake_labels], [valid,sf_labels])
             else:
-                d_loss_real = self.discriminator.train_on_batch([imgs, labels], valid)
-                d_loss_fake = self.discriminator.train_on_batch([gen_imgs, fake_labels], fake)
+                d_loss_real = self.discriminator.train_on_batch([imgs, labels], [valid,sf_labels])
+                d_loss_fake = self.discriminator.train_on_batch([gen_imgs, fake_labels], [fake,sf_labels])
             d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
+            # print(self.discriminator.metrics_names)
 
             # ---------------------
             #  Train Generator
@@ -275,44 +285,48 @@ class DCGAN():
             sampled_labels = y_train[another_idx]
 
             # Train the generator (wants discriminator to mistake images as real)
-            g_loss = self.combined.train_on_batch([noise, sampled_labels], valid)
+            for i in range(4):
+                g_loss = self.combined.train_on_batch([noise, sampled_labels], valid)
 
             # Plot the progress
             # print(self.discriminator.metrics_names)
             # print(d_loss_real,"\n",d_loss_fake,"\n",d_loss)
             if epoch % 100 == 0:
-                print("%d [D loss: %f, acc.: %.2f%%(True %.2f%%, Fake %.2f%%)] [G loss: %f]" % (
-                epoch+self.PRE_EPOCH, d_loss[0], 100 * d_loss[1], 100 * d_loss_real[1], 100 * d_loss_fake[1], g_loss))
+                print("%d [D all loss %f, recognize loss: %f, sf_logcosh %f , acc.: %.2f%%(True %.2f%%, Fake %.2f%%)] [G loss: %f]" % (
+                epoch+self.PRE_EPOCH, d_loss[0], d_loss[1], d_loss[2],100 * d_loss[3], 100 * d_loss_real[3], 100 * d_loss_fake[3], g_loss))
 
             # If at save interval => save generated image samples
             if epoch % save_interval == 0:
                 self.save_model(epoch=epoch+self.PRE_EPOCH)
 
-            # if epoch % 1000 == 0:
-            # self.save_imgs(epoch + self.PRE_EPOCH)
-            # self.generate_and_test_signal(filename="images/RETRY_Sample_at_%s_epoch.svg" % (epoch+self.PRE_EPOCH))
+            if epoch % 2000 == 0:
+                self.save_imgs(epoch + self.PRE_EPOCH)
+                # self.generate_and_test_signal(filename="images/RETRY_Sample_at_%s_epoch.svg" % (epoch+self.PRE_EPOCH))
 
     def save_imgs(self, epoch):
         r, c = 2, 5
+        if epoch == None:
+            epoch = ""
 
         # Load the dataset
         from data import dataSet
         # x, y = tool_wear_dataset.get_recoginition_data_in_class_num(class_num=50)
         data = dataSet()
         x, y = data.get_reinforced_data()
-        y = data.get_condition_number_data()
-        # x = x[:, ::10, :]
-        (X_train, y_train) = x, y
-
-        X_train = normalize_signal_to_sample(X_train)
+        x = x[600:, :, 0:6]
+        y = data.get_reinforced_condition_data()[600:,:]
+        print(x.shape,y.shape)
 
         noise = np.random.normal(0, 1, (r * c, self.latent_dim))
-        sampled_labels = y[0:10]
+        another_idx = np.random.randint(0, y.shape[0], r * c)
+        sampled_labels = y[another_idx]
+        X_train = x[another_idx]
+
         print(sampled_labels.shape,sampled_labels)
         gen_imgs = self.generator.predict([noise, sampled_labels])
         gen_imgs = normalize_sample_to_signal(gen_imgs)
 
-        for channel in range(8):
+        for channel in range(6):
             fig, axs = plt.subplots(r, c)
             import os
             directory_path = os.path.join("images", "%s" % (channel + 1))
@@ -322,14 +336,37 @@ class DCGAN():
             for i in range(r):
                 for j in range(c):
                     # Force in Y
-                    axs[i, j].plot(gen_imgs[cnt, :, channel], label="%d" % (cnt))
-                    axs[i, j].set_title("%d "%(sampled_labels[cnt,0]))
+                    axs[i,j].plot(X_train[cnt,:,channel])
+                    #axs[i, j].plot(gen_imgs[cnt, :, channel], label="%d" % (cnt))
+                    axs[i, j].set_title("%d in No. %d"%(sampled_labels[cnt,0],cnt))
+
                     # axs[i, j].set_title("%d " % (sampled_labels[cnt][0]))
                     # axs[i, j].legend()
                     # axs[i, j].axis('off')
 
                     cnt += 1
-            fig.savefig("images/%d/channel_%d_epoch_%d.png" % (channel + 1, channel + 1, epoch))
+            fig.savefig("images/%d/channel_%d_epoch_%s_ORI.svg" % (channel + 1, channel + 1, epoch))
+            plt.close("all")
+
+        for channel in range(6):
+            fig, axs = plt.subplots(r, c)
+            import os
+            directory_path = os.path.join("images", "%s" % (channel + 1))
+            if not os.path.exists(directory_path):
+                os.mkdir(directory_path)
+            cnt = 0
+            for i in range(r):
+                for j in range(c):
+                    # Force in Y
+                    # axs[i,j].plot(X_train[cnt,:,channel])
+                    axs[i, j].plot(gen_imgs[cnt, :, channel], label="%d" % (cnt))
+                    axs[i, j].set_title("%d in No. %d"%(sampled_labels[cnt,0],cnt))
+                    # axs[i, j].set_title("%d " % (sampled_labels[cnt][0]))
+                    # axs[i, j].legend()
+                    # axs[i, j].axis('off')
+
+                    cnt += 1
+            fig.savefig("images/%d/channel_%d_epoch_%s_GEN.svg" % (channel + 1, channel + 1, epoch))
             plt.close("all")
 
     def save_model(self,epoch=None):
@@ -358,6 +395,7 @@ class DCGAN():
         load(self.generator, "dcgan_generator")
         load(self.discriminator, "dcgan_discriminator")
         if epoch:
+            print("load in EPOCH %d "%(epoch))
             load(self.generator, "dcgan_generator_REIN_SCALE@%s"%(epoch))
             load(self.discriminator, "dcgan_discriminator_REIN_SCALE@%s"%(epoch))
 
@@ -397,17 +435,17 @@ class DCGAN():
 
 if __name__ == '__main__':
     dcgan = DCGAN()
-    PREDICT = False
+    PREDICT = True
 
     if PREDICT:
-        EPOCH = 4000
+        EPOCH = None
         dcgan.load_model(epoch=EPOCH)
 
-        dcgan.save_imgs(1)
+        dcgan.save_imgs(EPOCH)
 
         # dcgan.generate_and_test_signal()
         # for i in range(20):
         #     dcgan.generate_and_test_signal(filename="GAN_REGRESSION_%s_EPOCH_%s.svg" %(i,EPOCH))
     else:
-        # dcgan.load_model(40000)
-        dcgan.train(epochs=10000+1, batch_size=16, save_interval=4000)
+        #dcgan.load_model(8000)
+        dcgan.train(epochs=100000+1, batch_size=32, save_interval=4000)
